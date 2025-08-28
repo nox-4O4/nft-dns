@@ -1,6 +1,8 @@
 # nft-dns
 Make the nftables resolve fqdn on-the-fly !
 
+The source of this project is https://git.azlux.fr/azlux/nft-dns, **PR are accepted on the source only**.
+
 Back on iptables, fqdn was available into rules, but was resolved at start only. This have never been improved.
 
 This project try to resolve this limitation.
