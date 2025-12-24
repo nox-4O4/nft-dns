@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-from datetime import datetime, timedelta
-import signal
-from pathlib import Path
+import argparse
 import configparser
+import logging
+import signal
+import subprocess
+from datetime import datetime, timedelta
+from pathlib import Path
 from time import sleep
 from typing import List
 
-import argparse
 import dns.resolver
-import logging
-
-import subprocess
 from pydantic import IPvAnyAddress
 
 import entry
@@ -141,8 +140,17 @@ def apply_config_entry(one_entry: entry.ModelEntry, old_ip_list: List[IPvAnyAddr
 
 def remove_config_entries():
     logging.info("Cleaning all entries")
+
+    # deduplicate and merge IPs per set
+    unique_ips = {}
     for i in values:
-        run_command(f"nft delete element {i.family} {i.table} {i.set_name} {{{', '.join([str(ip) for ip in i.ip_list])}}}")
+        set_specifier = f"{i.family} {i.table} {i.set_name}"
+        unique_ips[set_specifier] = unique_ips.get(set_specifier, set()) | set(map(str, i.ip_list))
+
+    # clear sets
+    for set_specifier, ips in unique_ips.items():
+        if ips:
+            run_command(f"nft delete element {set_specifier} {{{ips}}}")
 
 
 def run_command(cmd: str) -> str:
