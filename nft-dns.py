@@ -6,7 +6,7 @@ import signal
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from time import sleep
+from threading import Event
 from typing import Set
 
 import dns.resolver
@@ -16,7 +16,7 @@ import entry
 config = configparser.ConfigParser(interpolation=None)
 
 values = []
-stop = False
+exit_event = Event()
 logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s')
 logging.getLogger().setLevel(logging.INFO)
 
@@ -192,19 +192,15 @@ def run_command(cmd: str) -> str | None:
 
 
 def run_loop():
-    while True:
+    while not exit_event.is_set():
         update_dns()
         next_run = get_next_run_timer()
         sleep_second = (next_run - datetime.now()).seconds + 1  # +1 because the sleep is rounded to the second
         logging.info(f"Sleeping for {sleep_second}s")
+        exit_event.wait(sleep_second)
 
-        for i in range(sleep_second):
-            sleep(1)
-            if stop:
-                remove_config_entries()
-                break
-        if stop:
-            break
+    # cleanup on exit
+    remove_config_entries()
 
 
 def main():
@@ -214,8 +210,7 @@ def main():
 
 def handler(signum, frame):
     logging.warning(f"{signal.Signals(signum).name}({signum}) signal received. Exiting")
-    global stop
-    stop = True
+    exit_event.set()
 
 
 if __name__ == '__main__':
