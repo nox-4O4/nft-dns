@@ -47,27 +47,27 @@ def read_config():
     global values
     for section in config.sections():
         if section != 'GLOBAL' and config[section].getboolean('enable', fallback=False):
-            for fqdn in config[section]["domains"].split(','):
-                if config[section]["family"] in ['ip', 'ip6', 'inet']:
-                    family = config[section]["family"]
+            if config[section]["family"] in ['ip', 'ip6', 'inet']:
+                family = config[section]["family"]
+            else:
+                print(f"Invalid configuration: family of section \"{section}\" must be one of ip, ip6 or inet")
+                exit(1)
+            table = config[section].get('table', fallback='filter')
+            res = run_command(f"nft list set {family} {table} {config[section]['set_name']}")
+            typeof = 4
+            if not (args.dry_run or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('dry_run', fallback=False))):
+                if "type ipv4_addr" in res:
+                    typeof = 4
+                    logging.debug(f"set {config[section]['set_name']} well defined in ipv4_addr family")
+                elif "type ipv6_addr" in res:
+                    typeof = 6
+                    logging.debug(f"set {config[section]['set_name']} well defined in ipv6_addr family")
                 else:
-                    print(f"Erreur de config, family of {fqdn} not : ip, ip6 or inet")
+                    logging.error(f"Type of the {config[section]['set_name']} set not defined to \"ipv4_addr\" or \"ipv6_addr\" into the nftables set. Only theses type are allowed.")
                     exit(1)
-                table = config[section].get('table', fallback='filter')
-                res = run_command(f"nft list set {family} {table} {config[section]['set_name']}")
-                typeof = 4
-                if not (args.dry_run or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('dry_run', fallback=False))):
-                    if "type ipv4_addr" in res:
-                        typeof = 4
-                        logging.debug(f"set {config[section]['set_name']} well defined in ipv4_addr family")
-                    elif "type ipv6_addr" in res:
-                        typeof = 6
-                        logging.debug(f"set {config[section]['set_name']} well defined in ipv6_addr family")
-                    else:
-                        logging.error(f"Type of the {config[section]['set_name']} set not defined to \"ipv4_addr\" or \"ipv6_addr\" into the nftables set. Only theses type are allowed.")
-                        exit(1)
-                else:
-                    logging.info('The dry_run option force the typeof to "ipv4" since not command are executed to check that')
+            else:
+                logging.info('The dry_run option force the typeof to "ipv4" since not command are executed to check that')
+            for fqdn in config[section]["domains"].split(','):
                 result = entry.ModelEntry(
                     set_name=config[section]["set_name"],
                     family=family,
