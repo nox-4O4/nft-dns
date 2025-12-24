@@ -30,7 +30,7 @@ The script is both IPv4 and IPv6 compatible.
 ## Requirements
 
 To use this program you need:
-- At least **Debian 12** (I code with Pydantic Model (> 5.0))
+- At least **Python 3.10** (I code with Pydantic Model (> 5.0))
 - A NFTABLES with **already prepared** [named SET](https://wiki.nftables.org/wiki-nftables/index.php/Sets#Named_sets_specifications).
   - If the set doesn't exist, the program will stop itself.
   - For testing, you can have sets you don't call into a rule
