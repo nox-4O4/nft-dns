@@ -7,10 +7,9 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
-from typing import List
+from typing import Set
 
 import dns.resolver
-from pydantic import IPvAnyAddress
 
 import entry
 
@@ -95,14 +94,21 @@ def update_dns() -> None:
     max_ttl = config['GLOBAL'].getint('max_ttl', fallback=86400)
     min_ttl = config['GLOBAL'].getint('min_ttl', fallback=300)
 
+    # store distinct IP addresses per set prior to updating entries
+    old_ip_set = {}
+    for i in values:
+        set_specifier = f"{i.family} {i.table} {i.set_name}"
+        old_ip_set[set_specifier] = old_ip_set.get(set_specifier, set()) | set(map(str, i.ip_list))
+
     for i in values:
         if i.next_update and i.next_update > datetime.now():
             continue
-        old_ip_list = i.ip_list
+        entry_old_ip_list = i.ip_list
         logging.debug(f"Update for {i} in progress...")
         rd_type = "A"
         if i.typeof == 6:
             rd_type = "AAAA"
+
         try:
             answer = res.resolve(i.fqdn, rdtype=rd_type)
             i.ip_list = [items.address for items in answer.rrset]
@@ -119,23 +125,38 @@ def update_dns() -> None:
         i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + 2)  # adding two seconds to make sure the cache really is cleared
 
         logging.debug(i)
-        if old_ip_list != i.ip_list:
-            logging.info(f"Updating the IPv{i.typeof} addresses for {i.fqdn} with {i.ip_list}")
-            apply_config_entry(i, old_ip_list=old_ip_list)
+        if entry_old_ip_list != i.ip_list:
+            logging.info(f"Updating the IPv{i.typeof} addresses for {i.fqdn}. Previous: {entry_old_ip_list}; new: {i.ip_list}")
         else:
             logging.debug(f"The IPv{i.typeof} addresses for {i.fqdn} did not change")
+
+    updated_ip_set = {}
+    for i in values:
+        set_specifier = f"{i.family} {i.table} {i.set_name}"
+        updated_ip_set[set_specifier] = updated_ip_set.get(set_specifier, set()) | set(map(str, i.ip_list))
+
+    for set_specifier in updated_ip_set.keys():
+        apply_config_entry(set_specifier, old_ip_set[set_specifier], updated_ip_set[set_specifier])
 
 
 def get_next_run_timer() -> datetime:
     return min([date.next_update for date in values])
 
 
-def apply_config_entry(one_entry: entry.ModelEntry, old_ip_list: List[IPvAnyAddress] | None) -> None:
-    if old_ip_list:
-        run_command(f"nft delete element {one_entry.family} {one_entry.table} {one_entry.set_name} {{{', '.join([str(ip) for ip in old_ip_list])}}}")
+def apply_config_entry(set_specifier: str, old_ip_set: Set[str], updated_ip_set: Set[str]) -> None:
+    added_ips = updated_ip_set - old_ip_set
+    removed_ips = old_ip_set - updated_ip_set
 
-    if one_entry.ip_list:
-        run_command(f"nft add element {one_entry.family} {one_entry.table} {one_entry.set_name} {{{', '.join([str(ip) for ip in one_entry.ip_list])}}}")
+    if added_ips:
+        run_command(f"nft add element {set_specifier} {{{', '.join(added_ips)}}}")
+        logging.info(f"Added {len(added_ips)} entries to set {set_specifier}")
+
+    if removed_ips:
+        run_command(f"nft delete element {set_specifier} {{{', '.join(removed_ips)}}}")
+        logging.info(f"Removed {len(removed_ips)} entries from set {set_specifier}")
+
+    if not added_ips and not removed_ips:
+        logging.info(f"Set {set_specifier} did not change")
 
 
 def remove_config_entries():
