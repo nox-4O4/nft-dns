@@ -153,7 +153,7 @@ def remove_config_entries():
             run_command(f"nft delete element {set_specifier} {{{ips}}}")
 
 
-def run_command(cmd: str) -> str:
+def run_command(cmd: str) -> str | None:
     logging.debug(f"Command to run : {cmd}")
     if not (args.dry_run or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('dry_run', fallback=False))):
         try:
@@ -167,6 +167,7 @@ def run_command(cmd: str) -> str:
             exit(1)
     else:
         logging.debug("Dry-run detected, logging only, the previous command isn't executed")
+        return None
 
 
 def run_loop():
