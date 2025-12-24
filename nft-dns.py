@@ -101,10 +101,10 @@ def update_dns() -> None:
             continue
         old_ip_list = i.ip_list
         logging.debug(f"Update for {i} in progress...")
+        rd_type = "A"
+        if i.typeof == 6:
+            rd_type = "AAAA"
         try:
-            rd_type = "A"
-            if i.typeof == 6:
-                rd_type = "AAAA"
             answer = res.resolve(i.fqdn, rdtype=rd_type)
             i.ip_list = [items.address for items in answer.rrset]
             i.ip_list.sort()
@@ -114,6 +114,9 @@ def update_dns() -> None:
             i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + 1)  # +2 To be sure the cache is really cleared
         except dns.resolver.NXDOMAIN:
             logging.warning(f"Impossible to get the fqdn of \"{i.fqdn}\" from the \"{i.set_name}\" set, disabling.")
+            continue
+        except dns.resolver.NoAnswer:
+            logging.debug(f"The DNS response for \"{i.fqdn}\" did not contain an {rd_type} record, skipping.")
             continue
         logging.debug(i)
         if old_ip_list != i.ip_list:
