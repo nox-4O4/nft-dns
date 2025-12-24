@@ -181,8 +181,7 @@ def run_command(cmd: str) -> str | None:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True, shell=True)
             return res.stdout
         except subprocess.CalledProcessError as e:
-            logging.error(e.stdout)
-            logging.error(e.stderr)
+            logging.error(f"Command {cmd} failed with code {e.returncode}: {e}\n{e.stdout}\n{e.stderr}")
         except FileNotFoundError:
             logging.error("The nft command isn't found, Run with --dry-run to avoid nftable change tries")
             exit(1)
