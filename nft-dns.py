@@ -73,7 +73,7 @@ def read_config():
                     table=table,
                     typeof=typeof,
                     fqdn=fqdn.strip(),
-                    ip_list=None,
+                    ip_list=[],
                     ttl=None,
                     next_update=None
                 )
@@ -108,22 +108,22 @@ def update_dns() -> None:
             i.ip_list = [items.address for items in answer.rrset]
             i.ip_list.sort()
             i.ttl = answer.rrset.ttl
-            # Calcul next update for this entry
-            ttl_adjusted = max(min(i.ttl, max_ttl) + 1, min_ttl)  # Value between min_ttl and max_ttl
-            i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + 1)  # +2 To be sure the cache is really cleared
-        except dns.resolver.NXDOMAIN:
-            logging.warning(f"Impossible to get the fqdn of \"{i.fqdn}\" from the \"{i.set_name}\" set, disabling.")
-            continue
-        except dns.resolver.NoAnswer:
-            logging.debug(f"The DNS response for \"{i.fqdn}\" did not contain an {rd_type} record, skipping.")
-            continue
+
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer) as e:
+            logging.debug(f"Failed to get {rd_type} record for \"{i.fqdn}\", retrying again in {max_ttl} seconds. (Reason: {e})")
+            i.ip_list = []
+            i.ttl = max_ttl
+
+        # Calculate next update for this entry
+        ttl_adjusted = max(min(i.ttl, max_ttl), min_ttl)  # Value between min_ttl and max_ttl (inclusive)
+        i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + 2)  # adding two seconds to make sure the cache really is cleared
+
         logging.debug(i)
         if old_ip_list != i.ip_list:
-            logging.info(f"Updating the IPv{i.typeof} for {i.fqdn} with {i.ip_list}")
+            logging.info(f"Updating the IPv{i.typeof} addresses for {i.fqdn} with {i.ip_list}")
             apply_config_entry(i, old_ip_list=old_ip_list)
         else:
-            logging.debug(f"Nothing have change for the IPv{i.typeof} for {i.fqdn}")
-    values = [i for i in values if i.ip_list is not None]
+            logging.debug(f"The IPv{i.typeof} addresses for {i.fqdn} did not change")
 
 
 def get_next_run_timer() -> datetime:

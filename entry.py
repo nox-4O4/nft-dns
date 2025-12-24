@@ -10,6 +10,6 @@ class ModelEntry(BaseModel):
     family: str
     typeof: int
     table: str
-    ip_list: List[IPvAnyAddress] | None
+    ip_list: List[IPvAnyAddress]
     ttl: int | None
     next_update: datetime.datetime | None
