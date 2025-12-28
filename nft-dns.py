@@ -19,6 +19,8 @@ values = []
 exit_event = Event()
 logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s')
 logging.getLogger().setLevel(logging.INFO)
+clear_on_exit = True
+first_update = True
 
 
 def read_config():
@@ -38,6 +40,10 @@ def read_config():
             list_config = list(config_dir.glob("*.conf"))
             [logging.info(f"   {i}") for i in list_config]
             config.read(list_config)
+
+    global clear_on_exit
+    clear_on_exit = config['GLOBAL'].getboolean('clear_on_exit', fallback=True)
+
     logging.info("# Parsing the configuration")
     if args.verbose or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('verbose')):
         logging.getLogger().setLevel(logging.DEBUG)
@@ -86,7 +92,7 @@ def read_config():
 
 
 def update_dns() -> None:
-    global values
+    global values, first_update
     if config.has_option('GLOBAL', 'custom_resolver'):
         res = dns.resolver.make_resolver_at(config['GLOBAL']['custom_resolver'])
     else:
@@ -135,8 +141,14 @@ def update_dns() -> None:
         set_specifier = f"{i.family} {i.table} {i.set_name}"
         updated_ip_set[set_specifier] = updated_ip_set.get(set_specifier, set()) | set(map(str, i.ip_list))
 
+    if first_update and not clear_on_exit:
+        # when not removing entries on exit we have to clear the sets prior to first update to prevent stale entries from remaining in the set
+        clear_all_sets()
+
     for set_specifier in updated_ip_set.keys():
         apply_config_entry(set_specifier, old_ip_set[set_specifier], updated_ip_set[set_specifier])
+
+    first_update = False
 
 
 def get_next_run_timer() -> datetime:
@@ -159,8 +171,21 @@ def apply_config_entry(set_specifier: str, old_ip_set: Set[str], updated_ip_set:
         logging.info(f"Set {set_specifier} did not change")
 
 
-def remove_config_entries():
+def clear_all_sets():
     logging.info("Cleaning all entries")
+
+    sets = set()
+    for i in values:
+        set_specifier = f"{i.family} {i.table} {i.set_name}"
+        sets.add(set_specifier)
+
+    # clear sets
+    for set_specifier in sets:
+        run_command(f"nft flush set {set_specifier}")
+
+
+def remove_config_entries():
+    logging.info("Cleaning all added entries")
 
     # deduplicate and merge IPs per set
     unique_ips = {}
@@ -198,8 +223,9 @@ def run_loop():
         logging.info(f"Sleeping for {sleep_second}s")
         exit_event.wait(sleep_second)
 
-    # cleanup on exit
-    remove_config_entries()
+    if clear_on_exit:
+        # cleanup on exit
+        remove_config_entries()
 
 
 def main():
