@@ -80,6 +80,7 @@ def read_config():
                     fqdn=fqdn.strip(),
                     ip_list=[],
                     ttl=None,
+                    rr_dns=config[section].getboolean('rr_dns', fallback=False),
                     next_update=None
                 )
                 values.append(result)
@@ -99,6 +100,7 @@ def update_dns() -> None:
         res = dns.resolver.Resolver()
     max_ttl = config['GLOBAL'].getint('max_ttl', fallback=86400)
     min_ttl = config['GLOBAL'].getint('min_ttl', fallback=300)
+    rr_tries = config['GLOBAL'].getint('rr_tries', fallback=5)
 
     # store distinct IP addresses per set prior to updating entries
     old_ip_set = {}
@@ -116,10 +118,13 @@ def update_dns() -> None:
             rd_type = "AAAA"
 
         try:
-            answer = res.resolve(i.fqdn, rdtype=rd_type)
-            i.ip_list = [items.address for items in answer.rrset]
+            i.ip_list = []
+            for _ in range(0, rr_tries if i.rr_dns else 1):
+                answer = res.resolve(i.fqdn, rdtype=rd_type)
+                i.ip_list += [items.address for items in answer.rrset if items.address not in i.ip_list]
+                i.ttl = answer.rrset.ttl
+
             i.ip_list.sort()
-            i.ttl = answer.rrset.ttl
 
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer) as e:
             logging.debug(f"Failed to get {rd_type} record for \"{i.fqdn}\", retrying again in {max_ttl} seconds. (Reason: {e})")

@@ -12,4 +12,5 @@ class ModelEntry(BaseModel):
     table: str
     ip_list: List[IPvAnyAddress]
     ttl: int | None
+    rr_dns: bool
     next_update: datetime.datetime | None
