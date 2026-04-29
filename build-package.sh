@@ -12,9 +12,9 @@ STARTDIR="$(pwd)"
 DESTDIR="$STARTDIR/pkg"
 OUTDIR="$STARTDIR/deb"
 # get version
-repo="azlux/nft-dns"
-api=$(curl --silent "https://api.github.com/repos/$repo/releases/latest")
-new=$(echo $api | grep -Po '"tag_name": "\K.*?(?=")')
+repo="Azlux/nft-dns"
+api=$(curl --silent "https://git.azlux.fr/api/v1/repos/$repo/releases/latest")
+new=$(echo $api | grep -Po '"tag_name":"\K.*?(?=")')
 
 
 # Remove potential leftovers from a previous build
