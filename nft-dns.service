@@ -3,6 +3,7 @@ Description=NFTABLES DNS support
 DefaultDependencies=no
 After=nftables.service network-online.target
 Wants=network-online.target
+Requires=nftables.service
 
 [Service]
 Type=simple
