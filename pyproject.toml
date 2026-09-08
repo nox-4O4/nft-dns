@@ -1,0 +1,29 @@
+[project]
+name = "nft-dns"
+version = "0.7"
+dependencies = [
+    "dnspython==2.7.0",
+    "pydantic==2.10.6"
+]
+requires-python = ">=3.12"
+authors = [
+    { name = "Azlux", email = "github@azlux.fr" },
+]
+maintainers = [
+    { name = "Azlux", email = "github@azlux.fr" }
+]
+description = "Make nftables resolve fqdn on-the-fly"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["nft", "python3", "fqdn"]
+classifiers = [
+    "Intended Audience :: System Administrators",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python"
+]
+
+[tool.ruff]
+line-length = 200
+nested-string-quote-style = "preferred"
+quote-style = "double"
