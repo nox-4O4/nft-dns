@@ -1,6 +1,6 @@
 [project]
 name = "nft-dns"
-version = "0.7"
+version = "0.8"
 dependencies = [
     "dnspython==2.7.0",
     "pydantic==2.10.6"
