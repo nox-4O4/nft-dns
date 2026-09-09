@@ -5,7 +5,7 @@ import logging
 import signal
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 
@@ -55,6 +55,9 @@ def read_config():
                     sys.exit(1)
                 table = config[section].get("table", fallback="filter")
                 res = run_command(f"nft list set {family} {table} {config[section]['set_name']}")
+                if not res:
+                    logger.error(f"The named set '{family} {table} {config[section]['set_name']}' hasn't been found")
+                    sys.exit(1)
                 typeof = 4
                 if not (args.dry_run or (config.has_option("GLOBAL", "verbose") and config["GLOBAL"].getboolean("dry_run", fallback=False))):
                     if "type ipv4_addr" in res:
@@ -97,7 +100,7 @@ def update_dns() -> None:
     min_ttl = config["GLOBAL"].getint("min_ttl", fallback=300)
 
     for i in values:
-        if i.next_update and i.next_update > datetime.now(UTC):
+        if i.next_update and i.next_update > datetime.now():
             continue
         old_ip_list = i.ip_list
         logger.debug(f"Update for {i} in progress...")
@@ -111,7 +114,7 @@ def update_dns() -> None:
             i.ttl = answer.rrset.ttl
             # calcul next update for this entry
             ttl_adjusted = max(min(i.ttl, max_ttl) + 1, min_ttl)  # Value between min_ttl and max_ttl
-            i.next_update = datetime.now(UTC) + timedelta(seconds=ttl_adjusted + 1)  # +2 To be sure the cache is really cleared
+            i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + 1)  # +2 To be sure the cache is really cleared
         except dns.resolver.NXDOMAIN:
             logger.warning(f'Impossible to get the fqdn of "{i.fqdn}" from the "{i.set_name}" set, disabling.')
             continue
@@ -153,6 +156,7 @@ def run_command(cmd: str):
         except subprocess.CalledProcessError as e:
             logger.error(e.stdout)
             logger.error(e.stderr)
+            return ""
         except FileNotFoundError:
             logger.error("The nft command isn't found, Run with --dry-run to avoid nftable change tries")
             sys.exit(1)
