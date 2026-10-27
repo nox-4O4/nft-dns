@@ -43,6 +43,29 @@ This section modify the program. This section is **optional** and can be removed
   Limit of the min TTL, don't allow a refresh be lower than this value.
   This can be impacting is you have fast DNS change (*e.g. deb.debian.org have a 30s TTL*), so you may want to lower this value.
 
+- `update_delay` (float)
+
+  Default: `2`
+  Seconds added to the TTL before an entry is resolved again, to make sure the DNS cache has expired.
+  Behind a local caching resolver that reports the remaining TTL (e.g. unbound with `min_ttl = 0`) a small value like `0.2` is enough.
+
+- `removal_grace` (int)
+
+  Default: `0`
+  Seconds an address stays in the set after the last answer containing it has expired. `0` removes it as soon as it is no longer resolved.
+  Useful for programs that resolve shortly before the TTL expires and connect afterwards (retries, own DNS cache).
+
+- `clear_on_exit` (bool)
+
+  Default: `True`
+  If `True`, the added addresses are removed from the sets on exit.
+  If `False`, they are kept, and on the next start the addresses already in the sets are taken over as seen at start: they are removed once they are not resolved again within `removal_grace`.
+
+- `rr_tries` (int)
+
+  Default: `5`
+  Number of times a domain with `rr_dns` enabled is resolved per update. The addresses of all answers are added to the set.
+
 - `mode` (str)
 
   not implemented yet
@@ -73,7 +96,7 @@ This section modify the program. This section is **optional** and can be removed
 All others sections are your fqdn resolutions configuration.
 You need at least one section to make this program work. These sections cannot be named "GLOBAL" since it's used by the program itself.
 
-**All followings parameters are mandatory**
+**The parameters `set_name`, `family` and `domains` are mandatory, the others are optional**
 
 - `[put-a-name-here]` (str)
  
@@ -89,9 +112,9 @@ You need at least one section to make this program work. These sections cannot b
 
 - `enable` (bool)
 
-  no Default
+  Default: `False`
   
-  You need to specify if you want to activate this rule with `True` or keep it disabled with `False`
+  You need to set it to `True` to activate this rule, otherwise the section is ignored
 
 - `family` (str)
   
@@ -112,6 +135,13 @@ You need at least one section to make this program work. These sections cannot b
   This is the domain (fqdn) you want to resolve and added to your set.
   
   Multiple fqdn can be specified, separated with `,`
+
+- `rr_dns` (bool)
+
+  Default: `False`
+
+  Set to `True` for domains using Round Robin DNS that return only some of their addresses per answer.
+  Each domain is then resolved `rr_tries` times per update, so the set more likely contains the address the system resolved.
 
 # BUGS
 Report issues at: <https://github.com/azlux/nft-dns/issues>

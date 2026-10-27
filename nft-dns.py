@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import json
 import logging
 import signal
 import subprocess
@@ -11,6 +12,7 @@ from pathlib import Path
 from threading import Event
 from typing import Set
 
+import dns.exception
 import dns.resolver
 
 import entry
@@ -22,7 +24,8 @@ exit_event = Event()
 logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s')
 logging.getLogger().setLevel(logging.INFO)
 clear_on_exit = True
-first_update = True
+last_seen = {}  # per set, last time the IP address was part of a valid DNS answer
+next_removal = None  # when the next address that is no longer resolved runs out of removal_grace
 
 
 def read_config():
@@ -95,7 +98,7 @@ def read_config():
 
 
 def update_dns() -> None:
-    global values, first_update
+    global values, next_removal
     if config.has_option('GLOBAL', 'custom_resolver'):
         res = dns.resolver.make_resolver_at(config['GLOBAL']['custom_resolver'])
     else:
@@ -103,17 +106,18 @@ def update_dns() -> None:
     max_ttl = config['GLOBAL'].getint('max_ttl', fallback=86400)
     min_ttl = config['GLOBAL'].getint('min_ttl', fallback=300)
     rr_tries = config['GLOBAL'].getint('rr_tries', fallback=5)
-
-    # store distinct IP addresses per set prior to updating entries
-    old_ip_set = {}
-    for i in values:
-        set_specifier = f"{i.family} {i.table} {i.set_name}"
-        old_ip_set[set_specifier] = old_ip_set.get(set_specifier, set()) | set(map(str, i.ip_list))
+    removal_grace = timedelta(seconds=config['GLOBAL'].getint('removal_grace', fallback=0))
+    update_delay = config['GLOBAL'].getfloat('update_delay', fallback=2)
+    error_retry_ttl = 30  # retry delay after a failed lookup (failure recheck timer of RFC 8767, section 5), still limited by min_ttl and max_ttl
 
     for i in values:
         if i.next_update and i.next_update > datetime.now():
             continue
         entry_old_ip_list = i.ip_list
+        # the previous answer was valid until now, so removal_grace counts from here for addresses that are not resolved again
+        seen = last_seen.setdefault(f"{i.family} {i.table} {i.set_name}", {})
+        for ip in entry_old_ip_list:
+            seen[ip] = datetime.now()
         logging.debug(f"Update for {i} in progress...")
         rd_type = "A"
         if i.typeof == 6:
@@ -133,9 +137,15 @@ def update_dns() -> None:
             i.ip_list = []
             i.ttl = max_ttl
 
+        except dns.exception.DNSException as e:
+            # resolver unreachable or failing (timeout, SERVFAIL, ...): this says nothing about the domain, so keep its addresses instead of exiting
+            logging.warning(f"Failed to resolve {rd_type} record for \"{i.fqdn}\", keeping previous addresses and retrying later. (Reason: {e})")
+            i.ip_list = entry_old_ip_list
+            i.ttl = error_retry_ttl
+
         # Calculate next update for this entry
         ttl_adjusted = max(min(i.ttl, max_ttl), min_ttl)  # Value between min_ttl and max_ttl (inclusive)
-        i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + 2)  # adding two seconds to make sure the cache really is cleared
+        i.next_update = datetime.now() + timedelta(seconds=ttl_adjusted + update_delay)  # adding update_delay to make sure the cache really is cleared
 
         logging.debug(i)
         if entry_old_ip_list != i.ip_list:
@@ -148,18 +158,30 @@ def update_dns() -> None:
         set_specifier = f"{i.family} {i.table} {i.set_name}"
         updated_ip_set[set_specifier] = updated_ip_set.get(set_specifier, set()) | set(map(str, i.ip_list))
 
-    if first_update and not clear_on_exit:
-        # when not removing entries on exit we have to clear the sets prior to first update to prevent stale entries from remaining in the set
-        clear_all_sets()
+    # addresses no longer resolved stay in the set until they have not been seen for removal_grace,
+    # so programs that resolved them shortly before can still connect
+    now = datetime.now()
+    not_seen_now = []
+    for set_specifier, ips in updated_ip_set.items():
+        seen = last_seen.setdefault(set_specifier, {})
+        old_ips = set(seen)
+        for ip in ips:
+            seen[ip] = now
+        for ip, seen_at in list(seen.items()):
+            if ip in ips:
+                continue
+            if now - seen_at >= removal_grace:
+                del seen[ip]
+            else:
+                not_seen_now.append(seen_at)
+                logging.debug(f"Keeping {ip} in set {set_specifier} until {seen_at + removal_grace}, last seen {seen_at}")
+        apply_config_entry(set_specifier, old_ips, set(seen))
 
-    for set_specifier in updated_ip_set.keys():
-        apply_config_entry(set_specifier, old_ip_set[set_specifier], updated_ip_set[set_specifier])
-
-    first_update = False
+    next_removal = min(not_seen_now) + removal_grace if not_seen_now else None
 
 
 def get_next_run_timer() -> datetime:
-    return min([date.next_update for date in values])
+    return min([date.next_update for date in values] + ([next_removal] if next_removal else []))
 
 
 def apply_config_entry(set_specifier: str, old_ip_set: Set[str], updated_ip_set: Set[str]) -> None:
@@ -178,32 +200,34 @@ def apply_config_entry(set_specifier: str, old_ip_set: Set[str], updated_ip_set:
         logging.info(f"Set {set_specifier} did not change")
 
 
-def clear_all_sets():
-    logging.info("Cleaning all entries")
-
-    sets = set()
-    for i in values:
-        set_specifier = f"{i.family} {i.table} {i.set_name}"
-        sets.add(set_specifier)
-
-    # clear sets
-    for set_specifier in sets:
-        run_command(f"nft flush set {set_specifier}")
+def read_existing_entries():
+    # when not removing entries on exit, the sets still hold the addresses of the previous run: adopt them as seen at start
+    # instead of flushing the sets, so an address only disappears once it was not confirmed for removal_grace
+    start = datetime.now()
+    for set_specifier in {f"{i.family} {i.table} {i.set_name}" for i in values}:
+        res = run_command(f"nft -j list set {set_specifier}")
+        if not res:
+            continue
+        seen = last_seen.setdefault(set_specifier, {})
+        for item in json.loads(res)['nftables']:
+            elements = item.get('set', {}).get('elem', [])
+            for element in elements if isinstance(elements, list) else [elements]:
+                # a plain address, or an elem object if the set has timeouts, counters or comments
+                ip = element['elem'].get('val') if isinstance(element, dict) and 'elem' in element else element
+                if isinstance(ip, str):
+                    seen[ip] = start
+                else:
+                    logging.warning(f"Ignoring element {element} of set {set_specifier}, only single addresses are managed")
+        logging.info(f"Found {len(seen)} existing entries in set {set_specifier}")
 
 
 def remove_config_entries():
     logging.info("Cleaning all added entries")
 
-    # deduplicate and merge IPs per set
-    unique_ips = {}
-    for i in values:
-        set_specifier = f"{i.family} {i.table} {i.set_name}"
-        unique_ips[set_specifier] = unique_ips.get(set_specifier, set()) | set(map(str, i.ip_list))
-
-    # clear sets
-    for set_specifier, ips in unique_ips.items():
-        if ips:
-            run_command(f"nft delete element {set_specifier} {{{ips}}}")
+    # clear sets, including addresses still kept for removal_grace
+    for set_specifier, seen in last_seen.items():
+        if seen:
+            run_command(f"nft delete element {set_specifier} {{{', '.join(seen)}}}")
 
 
 def run_command(cmd: str) -> str | None:
@@ -226,8 +250,9 @@ def run_loop():
     while not exit_event.is_set():
         update_dns()
         next_run = get_next_run_timer()
-        sleep_second = (next_run - datetime.now()).seconds + 1  # +1 because the sleep is rounded to the second
-        logging.info(f"Sleeping for {sleep_second}s")
+        # sleep at least 0.1s, so that a TTL of 0 with update_delay = 0 does not resolve in a loop without pause
+        sleep_second = max((next_run - datetime.now()).total_seconds(), 0.1)  # using total_seconds() instead of seconds so seconds don't wrap around to almost a day if next_run already passed
+        logging.info(f"Sleeping for {sleep_second:.1f}s")
         exit_event.wait(sleep_second)
 
     if clear_on_exit:
@@ -237,6 +262,8 @@ def run_loop():
 
 def main():
     read_config()
+    if not clear_on_exit:
+        read_existing_entries()
     run_loop()
 
 
