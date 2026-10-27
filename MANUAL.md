@@ -74,7 +74,7 @@ This section modify the program. This section is **optional** and can be removed
 
   Default: not set
   If not set, the system dns server will be used (most of the time, the one into `/etc/resolv.conf`).
-  If set, the resolver specified here will be used.
+  If set, the resolver specified here will be used. Requires dnspython 2.4 or later (Debian 13).
 
 - `dry_run` (bool)
 

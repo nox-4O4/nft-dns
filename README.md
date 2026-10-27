@@ -1,7 +1,28 @@
 # nft-dns
 Make the nftables resolve fqdn on-the-fly !
 
-The source of this project is https://git.azlux.fr/azlux/nft-dns, **PR are accepted on the source only**.
+This is a fork of [azlux/nft-dns](https://git.azlux.fr/azlux/nft-dns). Its README follows [below](#readme-of-azluxnft-dns),
+this section lists what has changed notably compared to it.
+
+## Changes in this fork
+- **No Pydantic**, so no recent Debian is required: runs with Python 3.9 to 3.14, and Python 3.9 with dnspython 2.0 (Debian 11) is enough except for `custom_resolver` (see the manual).
+  azlux/nft-dns needs Debian 12 or later for Pydantic, or Python 3.12 or later with Pydantic 2.
+- **Shared addresses**: an address that several domains resolve to stays in the set as long as one of them still resolves to it.
+- **Missing records**: domains that do not exist or have no A/AAAA record are checked again after `max_ttl`, instead of being disabled for good or terminating the program.
+- **Resolver failures** such as timeouts or SERVFAIL no longer terminate the program; the known addresses are kept and the lookup is retried.
+- **Timing**: an entry is resolved again `update_delay` after its TTL, with sub-second precision. The original calculation slept for almost a day when an update took longer than the next TTL.
+- **Grace period**: with `removal_grace`, addresses that are no longer resolved stay in the set for a while, for clients that resolved them shortly before.
+- **Restarts**: with `clear_on_exit = False`, the addresses stay in the sets on exit and are taken over on the next start instead of flushing the sets.
+- **Cleanup on exit** removes only the addresses added by nft-dns instead of flushing the sets.
+- **Round Robin DNS**: with `rr_dns` and `rr_tries`, a domain is resolved several times per update.
+
+The options are described in the [manual](./MANUAL.md). The APT packages mentioned below are built from azlux/nft-dns and do not contain these changes.
+
+-----
+# README of azlux/nft-dns
+Unchanged except for the requirements, which apply to this fork.
+
+The source of this project is https://git.azlux.fr/azlux/nft-dns.
 
 Back on iptables, fqdn was available into rules, but was resolved at start only. This have never been improved.
 
