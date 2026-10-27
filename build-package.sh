@@ -12,9 +12,9 @@ STARTDIR="$(pwd)"
 DESTDIR="$STARTDIR/pkg"
 OUTDIR="$STARTDIR/deb"
 # get version
-repo="azlux/nft-dns"
-api=$(curl --silent "https://api.github.com/repos/$repo/releases/latest")
-new=$(echo $api | grep -Po '"tag_name": "\K.*?(?=")')
+repo="Azlux/nft-dns"
+api=$(curl --silent "https://git.azlux.fr/api/v1/repos/$repo/releases/latest")
+new=$(echo $api | grep -Po '"tag_name":"\K.*?(?=")')
 
 
 # Remove potential leftovers from a previous build
@@ -22,7 +22,7 @@ rm -rf "$DESTDIR" "$OUTDIR"
 
 ## nft-dns
 # Create directory
-install -Dm 644 "$STARTDIR/nft-dns.service" "$DESTDIR/etc/systemd/system/nft-dns.service"
+install -Dm 644 "$STARTDIR/nft-dns.service" "$DESTDIR/usr/lib/systemd/system/nft-dns.service"
 install -Dm 755 "$STARTDIR/nft-dns.py" "$DESTDIR/opt/nft-dns/nft-dns.py"
 install -Dm 755 "$STARTDIR/entry.py" "$DESTDIR/opt/nft-dns/entry.py"
 install -Dm 644 "$STARTDIR/nft-dns.conf" "$DESTDIR/etc/nft-dns.conf"

@@ -7,6 +7,7 @@ case "$1" in
     remove)
         [ -d  /run/systemd/system/ ] && systemctl stop nft-dns
         [ -d  /run/systemd/system/ ] && systemctl disable nft-dns
+        rm -r /opt/nft-dns/__pycache__
         exit 0
         ;;
     *)

@@ -27,19 +27,20 @@ The script is both IPv4 and IPv6 compatible.
 - Packaged with apt
   - upgrade with APT 
   - Service packaged with systemd
-## Requirements
 
+## Requirements
 To use this program you need:
 - At least **Python 3.9**
-- A NFTABLES with **already prepared** [named SET](https://wiki.nftables.org/wiki-nftables/index.php/Sets#Named_sets_specifications).
+- A NFTABLES with an **already prepared** [named SET](https://wiki.nftables.org/wiki-nftables/index.php/Sets#Named_sets_specifications) (or more).
+  - the named sets used here **NEED** to be **EXCLUSIVE** to nft-dns.
   - If the set doesn't exist, the program will stop itself.
-  - For testing, you can have sets you don't call into a rule
+  - For testing, you can have sets you don't call into any rules.
 - If your OS have systemd, the package will prepare the systemd service too.
 
 ## Installation
 ### With APT (recommended)
 ```bash
-    echo "deb [signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian/ bookworm main" | sudo tee /etc/apt/sources.list.d/azlux.list
+    echo "deb [signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian/ trixie main" | sudo tee /etc/apt/sources.list.d/azlux.list
     sudo wget -O /usr/share/keyrings/azlux-archive-keyring.gpg  https://azlux.fr/repo.gpg
     sudo apt update
     sudo apt install nft-dns

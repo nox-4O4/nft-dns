@@ -56,7 +56,7 @@ def read_config():
     global values
     for section in config.sections():
         if section != 'GLOBAL' and config[section].getboolean('enable', fallback=False):
-            if config[section]["family"] in ['ip', 'ip6', 'inet']:
+            if config[section].get('family') in ['ip', 'ip6', 'inet']:
                 family = config[section]["family"]
             else:
                 print(f"Invalid configuration: family of section \"{section}\" must be one of ip, ip6 or inet")
@@ -65,6 +65,9 @@ def read_config():
             res = run_command(f"nft list set {family} {table} {config[section]['set_name']}")
             typeof = 4
             if not (args.dry_run or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('dry_run', fallback=False))):
+                if not res:
+                    logging.error(f"The named set \"{family} {table} {config[section]['set_name']}\" has not been found")
+                    exit(1)
                 if "type ipv4_addr" in res:
                     typeof = 4
                     logging.debug(f"set {config[section]['set_name']} well defined in ipv4_addr family")
