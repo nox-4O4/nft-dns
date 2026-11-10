@@ -200,7 +200,7 @@ def apply_config_entry(set_specifier: str, old_ip_set: Set[str], updated_ip_set:
         logging.info(f"Removed {len(removed_ips)} entries from set {set_specifier}")
 
     if not added_ips and not removed_ips:
-        logging.info(f"Set {set_specifier} did not change")
+        logging.debug(f"Set {set_specifier} did not change")
 
 
 def read_existing_entries():
@@ -255,7 +255,7 @@ def run_loop():
         next_run = get_next_run_timer()
         # sleep at least 0.1s, so that a TTL of 0 with update_delay = 0 does not resolve in a loop without pause
         sleep_second = max((next_run - datetime.now()).total_seconds(), 0.1)  # using total_seconds() instead of seconds so seconds don't wrap around to almost a day if next_run already passed
-        logging.info(f"Sleeping for {sleep_second:.1f}s")
+        logging.debug(f"Sleeping for {sleep_second:.1f}s")
         exit_event.wait(sleep_second)
 
     if clear_on_exit:
