@@ -64,7 +64,7 @@ def read_config():
             table = config[section].get('table', fallback='filter')
             res = run_command(f"nft list set {family} {table} {config[section]['set_name']}")
             typeof = 4
-            if not (args.dry_run or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('dry_run', fallback=False))):
+            if not (args.dry_run or config['GLOBAL'].getboolean('dry_run', fallback=False)):
                 if not res:
                     logging.error(f"The named set \"{family} {table} {config[section]['set_name']}\" has not been found")
                     exit(1)
@@ -235,7 +235,7 @@ def remove_config_entries():
 
 def run_command(cmd: str) -> str | None:
     logging.debug(f"Command to run : {cmd}")
-    if not (args.dry_run or (config.has_option('GLOBAL', 'verbose') and config['GLOBAL'].getboolean('dry_run', fallback=False))):
+    if not (args.dry_run or config['GLOBAL'].getboolean('dry_run', fallback=False)):
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True, shell=True)
             return res.stdout
